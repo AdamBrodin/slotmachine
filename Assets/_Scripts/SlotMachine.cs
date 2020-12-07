@@ -107,7 +107,7 @@ public class SlotMachine : MonoBehaviour
         AudioManager.Instance.SetState("RerollSound", true);
         foreach (int i in imageIndexes)
         {
-            slotImages[i].color = Color.cyan;
+            slotImages[i].color = Color.yellow;
         }
 
         yield return new WaitForSeconds(1f);

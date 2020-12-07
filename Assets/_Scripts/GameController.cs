@@ -27,15 +27,13 @@ public class GameController : MonoBehaviour
     private List<int[]> winScenarios = new List<int[]>();
 
     // Columns
-    private readonly int[] firstColumn = new int[] { 0, 5, 10, 15, 20 };
-    private readonly int[] secondColumn = new int[] { 1, 6, 11, 16, 21 };
-    private readonly int[] thirdColumn = new int[] { 2, 7, 12, 17, 22 };
-    private readonly int[] fourthColumn = new int[] { 3, 8, 13, 18, 23 };
-    private readonly int[] fifthColumn = new int[] { 4, 9, 14, 19, 24 };
+    private readonly int[] firstColumn = new int[] { 0, 3, 6 };
+    private readonly int[] secondColumn = new int[] { 1, 4, 7 };
+    private readonly int[] thirdColumn = new int[] { 2, 5, 8 };
 
     // Diagonals
-    private readonly int[] topLeftDiagonal = new int[] { 0, 6, 12, 18, 24 };
-    private readonly int[] bottomLeftDiagonal = new int[] { 4, 8, 12, 16, 20 };
+    private readonly int[] topLeftDiagonal = new int[] { 0, 4, 8 };
+    private readonly int[] bottomLeftDiagonal = new int[] { 2, 4, 6 };
 
     #endregion
     private void Start()
@@ -47,8 +45,6 @@ public class GameController : MonoBehaviour
         winScenarios.Add(firstColumn);
         winScenarios.Add(secondColumn);
         winScenarios.Add(thirdColumn);
-        winScenarios.Add(fourthColumn);
-        winScenarios.Add(fifthColumn);
         winScenarios.Add(topLeftDiagonal);
         winScenarios.Add(bottomLeftDiagonal);
     }
@@ -104,13 +100,9 @@ public class GameController : MonoBehaviour
         g.GetComponent<TextMeshProUGUI>().text = $"+ ${payout}";
 
         Color textStartColor = balanceText.color;
-        Color panelStartColor = slotPanel.GetComponent<Image>().color;
-
         balanceText.color = Color.yellow;
-        //slotPanel.GetComponent<Image>().color = Color.yellow;
         yield return new WaitForSeconds(g.GetComponent<PopupText>().fadeTime);
         balanceText.color = textStartColor;
-        //slotPanel.GetComponent<Image>().color = panelStartColor;
     }
 
     private double PaylineCalculator()
@@ -121,68 +113,14 @@ public class GameController : MonoBehaviour
         // Checks scenarios
         foreach (int[] scenario in winScenarios)
         {
-            int counter = 0;
-            foreach (int i in scenario)
+            if (rolledItems[scenario[0]].itemID == rolledItems[scenario[1]].itemID && rolledItems[scenario[1]].itemID == rolledItems[scenario[2]].itemID)
             {
-                if (i < rolledItems.Length - 1)
-                {
-                    if (rolledItems[i].itemID == rolledItems[i + 1].itemID)
-                    {
-                        counter++;
-                        indexesToReroll.Add(i);
-                    }
-                }
-
-                if (counter >= 4)
-                {
-                    wonAmount += costPerSpin * rolledItems[i].payoutMultiplier;
-                }
+                indexesToReroll.Add(scenario[0]);
+                indexesToReroll.Add(scenario[1]);
+                indexesToReroll.Add(scenario[2]);
+                wonAmount += costPerSpin * rolledItems[scenario[0]].payoutMultiplier;
             }
         }
-
-        // Check for 4x or more touching
-        Dictionary<SlotItem, int> occurrences = new Dictionary<SlotItem, int>();
-        foreach (SlotItem item in rolledItems)
-        {
-            if (occurrences.ContainsKey(item))
-            {
-                occurrences[item]++;
-            }
-            else
-            {
-                occurrences.Add(item, 1);
-            }
-        }
-
-        foreach (KeyValuePair<SlotItem, int> pair in occurrences)
-        {
-            if (pair.Value >= 4)
-            {
-                Debug.Log($"Pair value of ID {pair.Key.image} is at {pair.Value}");
-                List<int> indexTotal = new List<int>();
-                foreach (SlotItem i in rolledItems)
-                {
-                    if (i.itemID == pair.Key.itemID)
-                    {
-                        indexTotal.Add(i.gameIndex);
-                        Debug.Log($"Added index of ID {i.image} at index - {i.gameIndex}");
-                    }
-                }
-
-                if ((int)(indexTotal.Sum(s => Convert.ToInt32(s)) / pair.Value) <= 5)
-                {
-                    Debug.Log($"Index distance is at {(int)(indexTotal.Sum(s => Convert.ToInt32(s)) / pair.Value)}");
-                    foreach (int i in indexTotal)
-                    {
-                        indexesToReroll.Add(i);
-                        Debug.Log($"Added reroll for index {i}");
-                    }
-
-                    wonAmount += (costPerSpin * pair.Key.payoutMultiplier) * pair.Value;
-                }
-            }
-        }
-
 
         if (wonAmount <= 0)
         {
