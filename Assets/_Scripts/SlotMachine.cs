@@ -20,12 +20,12 @@ public class SlotMachine : MonoBehaviour
     private GameObject[] columns;
     [SerializeField]
     private GameController gameController;
-    private List<Image> slotImages;
+    public List<SpriteRenderer> slotImages;
     [SerializeField]
     private Sprite defaultSlotImage;
     [SerializeField]
     private SlotItem[] slotItems;
-    //[HideInInspector]
+    [HideInInspector]
     public SlotItem[] rolledItems; // Only to keep track of roll, read-only!
     [SerializeField]
     #endregion
@@ -48,14 +48,14 @@ public class SlotMachine : MonoBehaviour
     {
         try
         {
-            slotImages = new List<Image>();
+            slotImages = new List<SpriteRenderer>();
 
             // Adds the image reference from UI
             foreach (GameObject g in columns)
             {
-                foreach (Image img in g.GetComponentsInChildren<Image>())
+                foreach (SpriteRenderer spr in g.GetComponentsInChildren<SpriteRenderer>())
                 {
-                    slotImages.Add(img);
+                    slotImages.Add(spr);
                 }
             }
         }
@@ -68,7 +68,7 @@ public class SlotMachine : MonoBehaviour
 
     private SlotItem RandomSlotItem()
     {
-        int roll = Random.Range(0, 101); // Between 0-100 (101 doesn't count)
+        int roll = Random.Range(0, 1001); // Between 0-1000 (1001 doesn't count)
         foreach (SlotItem item in slotItems)
         {
             if (item.rollLow <= roll && item.rollHigh >= roll)
@@ -80,23 +80,44 @@ public class SlotMachine : MonoBehaviour
         Debug.Log("An error occurred, no item was rolled, are roll limits correctly set?");
         return slotItems[0];
     }
-    public IEnumerator Spin()
+    public IEnumerator Spin(bool isRerollSymbol)
     {
-        foreach (Image img in slotImages)
+        if (rolledItems[0] != null)
         {
-            img.sprite = defaultSlotImage;
+            for (int i = 0; i < slotImages.Count; i++)
+            {
+                if (rolledItems[i].itemID == 7 && isRerollSymbol)
+                {
+                    continue;
+                }
+                slotImages[i].sprite = defaultSlotImage;
+            }
         }
+        yield return new WaitForSeconds(0.75f);
 
         for (int i = 0; i < slotImages.Count; i++)
         {
-            for (int t = 0; t <= Random.Range(2, 5); t++)
+            if (isRerollSymbol && rolledItems[i].itemID == 7)
+            {
+                continue;
+            }
+
+            for (int t = 0; t <= Random.Range(5, 10); t++)
             {
                 // Spin "animation"
-                rolledItems[i] = RandomSlotItem();
+                SlotItem newRollItem = RandomSlotItem();
+                if (gameController.isBonusRound)
+                {
+                    while (newRollItem.itemID == 7)
+                    {
+                        newRollItem = RandomSlotItem();
+                    }
+                }
+                rolledItems[i] = newRollItem;
                 slotImages[i].sprite = rolledItems[i].image;
                 yield return new WaitForSeconds(0.01f);
             }
-            yield return new WaitForSeconds(0.05f);
+            yield return new WaitForSeconds(Random.Range(0.03f, 0.06f));
             rolledItems[i].gameIndex = i;
         }
         gameController.CheckForWin();
@@ -105,19 +126,35 @@ public class SlotMachine : MonoBehaviour
     public IEnumerator Reroll(int[] imageIndexes)
     {
         AudioManager.Instance.SetState("RerollSound", true);
-        foreach (int i in imageIndexes)
-        {
-            slotImages[i].color = Color.yellow;
-        }
-
         yield return new WaitForSeconds(1f);
         foreach (int i in imageIndexes)
         {
-            rolledItems[i] = RandomSlotItem();
+            SlotItem newRollItem = RandomSlotItem();
+            if (gameController.isBonusRound)
+            {
+                while (newRollItem.itemID == 7)
+                {
+                    newRollItem = RandomSlotItem();
+                }
+            }
+            rolledItems[i] = newRollItem;
             slotImages[i].sprite = rolledItems[i].image;
             slotImages[i].color = Color.white;
-            AudioManager.Instance.SetState("SlotHitSound", true);
+
+            if (gameController.isBonusRound)
+            {
+                AudioManager.Instance.SetState("BonusHitSound", true);
+            }
+            else
+            {
+                AudioManager.Instance.SetState("SlotHitSound", true);
+            }
             yield return new WaitForSeconds(0.5f);
+        }
+
+        foreach (SpriteRenderer spr in slotImages)
+        {
+            spr.color = new Color(255, 255, 255, 1.0f);
         }
         gameController.CheckForWin();
     }

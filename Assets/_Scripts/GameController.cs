@@ -1,10 +1,9 @@
-﻿using System;
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
+using UnityEngine.Video;
 using Random = UnityEngine.Random;
 
 public class GameController : MonoBehaviour
@@ -13,14 +12,16 @@ public class GameController : MonoBehaviour
     [SerializeField]
     private SlotMachine slotMachine;
     [SerializeField]
-    private TextMeshProUGUI balanceText, betSizeText;
-    [SerializeField]
-    private GameObject slotPanel;
+    private TextMeshProUGUI balanceText, betSizeText, bonusText;
     [SerializeField]
     private GameObject popupText;
     public double cashBalance = 10000;
     public double costPerSpin = 32;
-    private bool isSpinning;
+    public bool isSpinning;
+    public bool isBonusRound;
+    private int bonusRoundsLeft, bonusMultiplier = 1;
+    [SerializeField]
+    private VideoPlayer backgroundVideo;
     private List<int> indexesToReroll = new List<int>();
 
     // Rows/Columns payline indexes
@@ -59,9 +60,9 @@ public class GameController : MonoBehaviour
         costPerSpin *= multiplier;
         betSizeText.text = $"BET SIZE: ${costPerSpin}";
     }
-    public void Spin()
+    public void Spin(bool isRerollSymbol)
     {
-        if (isSpinning)
+        if (isSpinning && !isRerollSymbol)
         {
             AudioManager.Instance.SetState("ErrorSound", true);
             return;
@@ -73,7 +74,12 @@ public class GameController : MonoBehaviour
             cashBalance -= costPerSpin;
             UpdateBalance();
             AudioManager.Instance.SetState("SpinSound", true);
-            StartCoroutine(slotMachine.Spin());
+            if (isBonusRound)
+            {
+                bonusRoundsLeft--;
+                UpdateBonusUI();
+            }
+            StartCoroutine(slotMachine.Spin(isRerollSymbol));
         }
         else if (cashBalance <= costPerSpin)
         {
@@ -84,8 +90,24 @@ public class GameController : MonoBehaviour
 
     private IEnumerator Win(double payout)
     {
+        if (isBonusRound)
+        {
+            bonusMultiplier++;
+            bonusRoundsLeft++;
+            payout *= bonusMultiplier;
+            UpdateBonusUI();
+        }
         cashBalance += payout;
         UpdateBalance();
+
+        if (isBonusRound)
+        {
+            AudioManager.Instance.TogglePause("BonusRoundMusic");
+        }
+        else
+        {
+            AudioManager.Instance.TogglePause("BackgroundMusic");
+        }
 
         if (payout >= costPerSpin * 5)
         {
@@ -96,13 +118,22 @@ public class GameController : MonoBehaviour
             AudioManager.Instance.SetState("WinSound", true);
         }
 
-        GameObject g = Instantiate(popupText, new Vector3(balanceText.transform.position.x + Random.Range(-500, 500), balanceText.transform.position.y + Random.Range(-500, -100), balanceText.transform.position.z), transform.rotation, GameObject.Find("Canvas").transform);
+        GameObject g = Instantiate(popupText, new Vector3(0, balanceText.transform.position.y, balanceText.transform.position.z), transform.rotation, GameObject.Find("Canvas").transform);
         g.GetComponent<TextMeshProUGUI>().text = $"+ ${payout}";
 
         Color textStartColor = balanceText.color;
         balanceText.color = Color.yellow;
         yield return new WaitForSeconds(g.GetComponent<PopupText>().fadeTime);
         balanceText.color = textStartColor;
+
+        if (isBonusRound)
+        {
+            AudioManager.Instance.TogglePause("BonusRoundMusic");
+        }
+        else
+        {
+            AudioManager.Instance.TogglePause("BackgroundMusic");
+        }
     }
 
     private double PaylineCalculator()
@@ -118,6 +149,16 @@ public class GameController : MonoBehaviour
                 indexesToReroll.Add(scenario[0]);
                 indexesToReroll.Add(scenario[1]);
                 indexesToReroll.Add(scenario[2]);
+                for (int i = 0; i < slotMachine.slotImages.Count; i++)
+                {
+                    if (i == scenario[0] || i == scenario[1] || i == scenario[2])
+                    {
+                        slotMachine.slotImages[i].color = new Color(0, 255, 0, 1.0f);
+                        continue;
+                    }
+
+                    slotMachine.slotImages[i].color = new Color(255, 255, 255, 0.15f);
+                }
                 wonAmount += costPerSpin * rolledItems[scenario[0]].payoutMultiplier;
             }
         }
@@ -130,6 +171,29 @@ public class GameController : MonoBehaviour
         else
         {
             return wonAmount;
+        }
+    }
+
+    private IEnumerator StartReroll()
+    {
+        AudioManager.Instance.SetState("RerollSymbolSound", true);
+        yield return new WaitForSeconds(2f);
+        Spin(true);
+    }
+
+    private void UpdateBonusUI()
+    {
+        if (isBonusRound)
+        {
+            if (!bonusText.gameObject.activeSelf)
+            {
+                bonusText.gameObject.SetActive(true);
+            }
+            bonusText.text = $"BONUS ROUNDS LEFT: {bonusRoundsLeft} - {bonusMultiplier}X";
+        }
+        else
+        {
+            bonusText.gameObject.SetActive(false);
         }
     }
     public void CheckForWin()
@@ -146,6 +210,51 @@ public class GameController : MonoBehaviour
             List<int> withoutDupes = indexesToReroll.Distinct().ToList();
             StartCoroutine(slotMachine.Reroll(withoutDupes.ToArray()));
             return;
+        }
+
+        int rerollCounter = 0, bonusCounter = 0;
+        foreach (SlotItem item in slotMachine.rolledItems)
+        {
+            if (item.itemID == 6) // Reroll symbol
+            {
+                rerollCounter++;
+            }
+
+            if (item.itemID == 7) // Bonus symbol
+            {
+                bonusCounter++;
+            }
+        }
+
+        if (rerollCounter > 0 || (rerollCounter + bonusCounter) >= 3)
+        {
+            if ((rerollCounter + bonusCounter) >= 3 && !isBonusRound)
+            {
+                AudioManager.Instance.SetState("BonusSound", true);
+                isBonusRound = true;
+                bonusRoundsLeft = Random.Range(5, 20);
+                UpdateBonusUI();
+                isSpinning = false;
+                AudioManager.Instance.SetState("BackgroundMusic", false);
+                AudioManager.Instance.SetState("BonusRoundMusic", true);
+                backgroundVideo.playbackSpeed = 3;
+            }
+            else if (rerollCounter > 0)
+            {
+                bonusRoundsLeft++;
+                StartCoroutine(StartReroll());
+            }
+            return;
+        }
+
+        if (isBonusRound && bonusRoundsLeft <= 0)
+        {
+            isBonusRound = false;
+            bonusMultiplier = 1;
+            bonusText.gameObject.SetActive(false);
+            AudioManager.Instance.SetState("BonusRoundMusic", false);
+            AudioManager.Instance.SetState("BackgroundMusic", true);
+            backgroundVideo.playbackSpeed = 1f;
         }
 
         isSpinning = false;

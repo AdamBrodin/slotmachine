@@ -102,5 +102,24 @@ public class AudioManager : MonoBehaviour
             }
         }
     }
+
+    public void TogglePause(string name)
+    {
+        Sound s = GetSoundInformation(name);
+        if (s != null)
+        {
+            if (!globalMute)
+            {
+                if (s.source.isPlaying)
+                {
+                    s.source.Pause();
+                }
+                else
+                {
+                    s.source.UnPause();
+                }
+            }
+        }
+    }
 }
 

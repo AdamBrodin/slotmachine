@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using UnityEngine.UI;
 
 public class UIHandler : MonoBehaviour
@@ -8,6 +9,7 @@ public class UIHandler : MonoBehaviour
     private GameController gameController;
     [SerializeField]
     private Button spinBtn, increaseBetBtn, decreaseBetBtn;
+    public static event Action startedSpinning = delegate { };
     #endregion
     private void Start()
     {
@@ -21,14 +23,22 @@ public class UIHandler : MonoBehaviour
         decreaseBetBtn.onClick.AddListener(DecreaseBetClick);
     }
 
+    private void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            SpinBtnClick();
+        }
+    }
+
     private void SpinBtnClick()
     {
-        gameController.Spin();
+        gameController.Spin(false);
     }
 
     private void IncreaseBetClick()
     {
-        if (gameController.costPerSpin <= gameController.cashBalance * 2)
+        if (gameController.costPerSpin <= gameController.cashBalance * 2 && !gameController.isSpinning && !gameController.isBonusRound)
         {
             gameController.ChangeBetSize(2);
         }
@@ -40,7 +50,7 @@ public class UIHandler : MonoBehaviour
 
     private void DecreaseBetClick()
     {
-        if (gameController.costPerSpin >= 0.5f)
+        if (gameController.costPerSpin >= 0.5f && !gameController.isSpinning && !gameController.isBonusRound)
         {
             gameController.ChangeBetSize(0.5f);
         }
